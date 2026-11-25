@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Digital Twin — Public Address System Simulator (100V Line)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: #070d19; color: #f8fafc; overflow: hidden; user-select: none; }
+    #canvas-container { width: 100vw; height: 100vh; display: block; }
+
+    /* Top Bar */
+    .top-bar {
+      position: absolute; top: 12px; left: 12px; right: 12px;
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+      pointer-events: none; z-index: 10;
+    }
+    .brand-card {
+      pointer-events: auto;
+      background: rgba(15, 23, 42, 0.88); border: 1px solid #334155;
+      padding: 10px 14px; border-radius: 10px; backdrop-filter: blur(10px);
+      max-width: 520px;
+    }
+    .brand-card h1 { font-size: 14px; color: #38bdf8; letter-spacing: 0.4px; }
+    .brand-card p { font-size: 11px; color: #94a3b8; margin-top: 3px; line-height: 1.4; }
+
+    /* Telemetry Strip */
+    .telemetry-strip {
+      pointer-events: auto;
+      display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+    }
+    .tele-box {
+      background: rgba(15, 23, 42, 0.88); border: 1px solid #334155;
+      padding: 8px 12px; border-radius: 10px; backdrop-filter: blur(10px); min-width: 125px;
+    }
+    .tele-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.4px; }
+    .tele-val { font-size: 14px; font-weight: 700; margin-top: 2px; color: #e2e8f0; }
+    .tele-sub { font-size: 10px; color: #64748b; margin-top: 1px; }
+    .warn-text { color: #f87171 !important; }
+    .ok-text { color: #4ade80 !important; }
+    .amber-text { color: #fbbf24 !important; }
+
+    /* Left Operator Control Panel */
+    .left-panel {
+      position: absolute; top: 82px; left: 12px; width: 278px; max-height: calc(100vh - 185px);
+      overflow-y: auto; background: rgba(15, 23, 42, 0.9); border: 1px solid #334155;
+      border-radius: 12px; padding: 12px; backdrop-filter: blur(10px); z-index: 10;
+    }
+    .panel-sec { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #1e293b; }
+    .panel-sec:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .panel-sec h3 { font-size: 11px; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+    .btn-row.three { grid-template-columns: 1fr 1fr 1fr; }
+    button {
+      background: #1e293b; color: #e2e8f0; border: 1px solid #475569;
+      padding: 6px 8px; border-radius: 7px; cursor: pointer; font-size: 11px;
+      transition: all 0.15s;
+    }
+    button:hover { background: #0369a1; border-color: #38bdf8; color: #fff; }
+    button.active { background: #0284c7; border-color: #7dd3fc; color: #fff; font-weight: 600; }
+    button.danger.active, button.danger:hover { background: #b91c1c; border-color: #f87171; }
+    button.ptt.active { background: #15803d; border-color: #4ade80; }
+
+    .slider-group { margin-bottom: 8px; }
+    .slider-head { display: flex; justify-content: space-between; font-size: 11px; color: #cbd5e1; margin-bottom: 3px; }
+    input[type="range"] { width: 100%; accent-color: #38bdf8; cursor: pointer; height: 4px; }
+
+    /* Right Inspector & Oscilloscope */
+    .right-col {
+      position: absolute; top: 82px; right: 12px; width: 330px; max-height: calc(100vh - 185px);
+      overflow-y: auto; display: flex; flex-direction: column; gap: 10px; z-index: 10;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.92); border: 1px solid #334155;
+      border-radius: 12px; padding: 12px; backdrop-filter: blur(10px);
+    }
+    .badge {
+      display: inline-block; background: #0369a1; color: #e0f2fe;
+      font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-bottom: 6px;
+    }
+    .card h2 { font-size: 14px; color: #f8fafc; margin-bottom: 6px; }
+    .detail-block { margin-top: 8px; }
+    .detail-title { font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+    .detail-text { font-size: 11.5px; line-height: 1.45; color: #cbd5e1; }
+    .sub-list { margin-top: 4px; padding-left: 14px; font-size: 11px; color: #94a3b8; line-height: 1.4; }
+    .sub-list li { margin-bottom: 2px; }
+
+    canvas.scope {
+      width: 100%; height: 96px; background: #020617; border: 1px solid #1e293b;
+      border-radius: 8px; display: block; margin-top: 6px;
+    }
+    .scope-legend {
+      display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-top: 5px;
+    }
+
+    /* Bottom Chain & Camera Bar */
+    .bottom-bar {
+      position: absolute; bottom: 12px; left: 12px; right: 12px;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+      background: rgba(15, 23, 42, 0.92); border: 1px solid #334155;
+      padding: 8px 12px; border-radius: 12px; backdrop-filter: blur(10px); z-index: 10;
+    }
+    .bar-group { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+    .bar-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; margin-right: 2px; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- TOP TELEMETRY & HEADER -->
+  <div class="top-bar">
+    <div class="brand-card">
+      <h1>3D DIGITAL TWIN — PUBLIC ADDRESS SYSTEM (100V LINE)</h1>
+      <p>Paging Mic (7 Lapisan) &rarr; Pre-Amp/Mixer (5 Blok) &rarr; Power Amp 100V (6 Blok) &rarr; Ceiling Speaker (6 Lapisan) + Sensor Telemetri</p>
+    </div>
+
+    <div class="telemetry-strip">
+      <div class="tele-box">
+        <div class="tele-label">Suhu Heatsink (DS18B20)</div>
+        <div class="tele-val ok-text" id="tele-temp">38.0 °C</div>
+        <div class="tele-sub" id="tele-temp-sub">Normal (&lt; 65°C)</div>
+      </div>
+      <div class="tele-box">
+        <div class="tele-label">Suara Input (MAX4466)</div>
+        <div class="tele-val amber-text" id="tele-sound">62.0 dB</div>
+        <div class="tele-sub" id="tele-sound-sub">Vokal / BGM Aktif</div>
+      </div>
+      <div class="tele-box">
+        <div class="tele-label">Arus Beban (ACS712/CT)</div>
+        <div class="tele-val" id="tele-current">1.45 A</div>
+        <div class="tele-sub" id="tele-current-sub">100V Line Stabil</div>
+      </div>
+      <div class="tele-box">
+        <div class="tele-label">Status Sistem</div>
+        <div class="tele-val ok-text" id="tele-status">NORMAL</div>
+        <div class="tele-sub" id="tele-status-sub">Relay Prioritas: Standby</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEFT OPERATOR CONTROLS -->
+  <div class="left-panel">
+    <div class="panel-sec">
+      <h3>1. Sumber &amp; Prioritas (Mixer)</h3>
+      <div class="btn-row">
+        <button id="btn-ptt" class="ptt" onclick="togglePTT()">PTT Mic: OFF</button>
+        <button id="btn-bgm" class="active" onclick="toggleBGM()">BGM: ON</button>
+      </div>
+      <div class="btn-row">
+        <button id="btn-alarm" class="danger" onclick="toggleAlarm()">Alarm: OFF</button>
+        <button id="btn-explode" onclick="toggleExplode()">Explode: OFF</button>
+      </div>
+      <div class="slider-group">
+        <div class="slider-head"><span>Gain / Pre-Amp</span><span id="val-gain">60%</span></div>
+        <input type="range" id="rng-gain" min="10" max="100" value="60" oninput="updateParams()" />
+      </div>
+      <div class="slider-group">
+        <div class="slider-head"><span>EQ Tone (Bass/Mid/Treble)</span><span id="val-eq">0 dB</span></div>
+        <input type="range" id="rng-eq" min="-12" max="12" value="0" oninput="updateParams()" />
+      </div>
+      <div class="slider-group">
+        <div class="slider-head"><span>Master Fader (Mixing)</span><span id="val-fader">75%</span></div>
+        <input type="range" id="rng-fader" min="0" max="100" value="75" oninput="updateParams()" />
+      </div>
+    </div>
+
+    <div class="panel-sec">
+      <h3>2. Power Amp &amp; Gangguan</h3>
+      <div class="slider-group">
+        <div class="slider-head"><span>Attenuator Penguat</span><span id="val-atten">70%</span></div>
+        <input type="range" id="rng-atten" min="0" max="100" value="70" oninput="updateParams()" />
+      </div>
+      <div class="slider-group">
+        <div class="slider-head"><span>Panjang Kabel 100V Line</span><span id="val-cable">120 m</span></div>
+        <input type="range" id="rng-cable" min="10" max="400" step="10" value="120" oninput="updateParams()" />
+      </div>
+      <div class="btn-row">
+        <button id="btn-short" class="danger" onclick="toggleFault('short')">Short Circuit</button>
+        <button id="btn-overload" class="danger" onclick="toggleFault('overload')">Overload</button>
+      </div>
+    </div>
+
+    <div class="panel-sec">
+      <h3>3. Ceiling Speaker (100V Tap)</h3>
+      <div class="btn-row three">
+        <button id="tap-3" onclick="setTap(3)">Tap 3W</button>
+        <button id="tap-6" class="active" onclick="setTap(6)">Tap 6W</button>
+        <button id="tap-15" onclick="setTap(15)">Tap 15W</button>
+      </div>
+      <div class="slider-group">
+        <div class="slider-head"><span>Jumlah Speaker Paralel</span><span id="val-spk">3 Unit</span></div>
+        <input type="range" id="rng-spk" min="1" max="6" value="3" oninput="updateParams()" />
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT COMPONENT INSPECTOR & OSCILLOSCOPE -->
+  <div class="right-col">
+    <div class="card">
+      <span class="badge" id="insp-badge">TAHAP 1 • TRANSDUSER INPUT</span>
+      <h2 id="insp-title">Paging Microphone (Kapsul Dinamis)</h2>
+      <div class="detail-block">
+        <div class="detail-title">Fungsi &amp; Prinsip Kerja</div>
+        <div class="detail-text" id="insp-func">Mengubah getaran akustik suara operator menjadi sinyal listrik analog lemah (orde mV) melalui induksi elektromagnetik.</div>
+      </div>
+      <div class="detail-block">
+        <div class="detail-title">Alur Sinyal &amp; Lapisan/Blok</div>
+        <div class="detail-text" id="insp-flow">Gelombang suara menembus Grille (1) &amp; Foam (2), menggetarkan Diafragma (3) dan Voice Coil (4) di medan Magnet Permanen (5), ditopang Housing (6), keluar via Kabel Sinyal Lemah (7).</div>
+      </div>
+      <div class="detail-block">
+        <div class="detail-title">Integrasi Sensor &amp; Detail Komponen</div>
+        <ul class="sub-list" id="insp-list">
+          <li>Sensor Suara MAX4466/INMP441 membaca level vokal &amp; memicu Priority Override saat PTT ditekan.</li>
+          <li>Tombol PTT/Chime mengaktifkan jalur prioritas pada Pre-Amplifier / Mixer.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="detail-title">Osiloskop 5 Titik Rantai Sinyal (Real-Time)</div>
+      <canvas id="scope-canvas" class="scope" width="300" height="96"></canvas>
+      <div class="scope-legend">
+        <span>1. Akustik</span>
+        <span>2. Mic (mV)</span>
+        <span>3. Line Level</span>
+        <span>4. 100V Line</span>
+        <span>5. Speaker Out</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM CHAIN & CAMERA BAR -->
+  <div class="bottom-bar">
+    <div class="bar-group">
+      <span class="bar-label">Alur Rantai:</span>
+      <button id="node-mic" class="active" onclick="focusNode('mic')">1. Paging Mic</button>
+      <button id="node-mixer" onclick="focusNode('mixer')">2. Pre-Amp / Mixer</button>
+      <button id="node-amp" onclick="focusNode('amp')">3. Power Amp 100V</button>
+      <button id="node-spk" onclick="focusNode('spk')">4. Ceiling Speaker</button>
+    </div>
+    <div class="bar-group">
+      <span class="bar-label">Kamera:</span>
+      <button onclick="setCam('overview')">Overview</button>
+      <button onclick="setCam('closeup')">Fokus Unit</button>
+      <button onclick="setCam('sensors')">Posisi Sensor</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- STATE SIMULASI ---
+    const state = {
+      ptt: false,
+      bgm: true,
+      alarm: false,
+      explode: false,
+      gain: 0.6,
+      eq: 0,
+      fader: 0.75,
+      atten: 0.7,
+      cableMeters: 120,
+      tapWatts: 6,
+      spkCount: 3,
+      fault: null, // null | 'short' | 'overload'
+      activeNode: 'mic',
+      tempC: 38.0,
+      soundDb: 62.0,
+      currentA: 1.45,
+      priorityActive: false,
+      protectTripped: false
+    };
+
+    // --- DATA PENJELASAN LENGKAP PER PERANGKAT ---
+    const nodeDetails = {
+      mic: {
+        badge: "TAHAP 1 • TRANSDUSER INPUT (7 LAPISAN KAPSUL)",
+        title: "Paging Microphone (Kapsul Dinamis)",
+        func: "Mengubah energi mekanik gelombang suara vokal menjadi sinyal listrik analog bertegangan sangat lemah (orde milivolt) berdasarkan prinsip induksi elektromagnetik.",
+        flow: "Suara masuk lewat (1) Grille Logam & (2) Foam Akustik -> menggetarkan (3) Diafragma -> menggerakkan (4) Kumparan Suara di medan (5) Magnet Permanen dalam (6) Rumah Kapsul -> keluar lewat (7) Kabel Sinyal Lemah.",
+        items: [
+          "Lapisan 1–2: Grille logam melindungi kapsul; foam/filter akustik meredam pop noise ('P', 'B', 'T').",
+          "Lapisan 3–5: Diafragma, voice coil, dan magnet permanen membangkitkan GGL induksi.",
+          "Lapisan 6–7: Housing menjaga presisi mekanis; kabel sinyal lemah mengirim mV ke Mixer.",
+          "Sensor Suara (MAX4466 / INMP441): Membaca amplitudo suara & memicu Priority Override saat PTT aktif."
+        ],
+        cam: [-14, 6, 12],
+        target: [-14, 1.5, 0]
+      },
+      mixer: {
+        badge: "TAHAP 2–3 • OTAK SISTEM & LINE LEVEL (5 BLOK PCB)",
+        title: "Pre-Amplifier / Mixer (19-Inch Rackmount)",
+        func: "Menguatkan sinyal lemah (mV), mengatur karakter nada, mengelola prioritas suara darurat/paging, mencampur kanal, dan menstabilkan sinyal ke standar Line Level (~0,775V–1,23V).",
+        flow: "Input (Mic, BGM, Alarm) -> (1) Gain/Pre-Amp -> (2) Tone Control/EQ -> (3) Priority Override -> (4) Mixing/Volume -> (5) Output Buffer -> Sinyal Line Level menuju Power Amplifier.",
+        items: [
+          "Blok 1–2: Op-Amp & coupling capacitor menaikkan gain; potensiometer/filter mengatur Bass/Mid/Treble.",
+          "Blok 3 (Priority Override): Relay/switch memutus atau menurunkan BGM saat PTT Mic atau Alarm aktif.",
+          "Blok 4–5: Summing fader mencampur kanal; output buffer menstabilkan impedansi Line Level.",
+          "Sensor Suara & Suhu: Status input mic/alarm memicu prioritas; sensor suhu memantau kabinet rak."
+        ],
+        cam: [-4.5, 7.5, 11],
+        target: [-4.5, 1.0, 0]
+      },
+      amp: {
+        badge: "TAHAP 4–5 • OTOT SISTEM & 100V LINE (6 BLOK DAYA)",
+        title: "Power Amplifier 100V Line",
+        func: "Menggandakan daya dan tegangan sinyal Line Level menggunakan energi catu daya, lalu menaikkan tegangan menjadi 100V Line agar minim voltage drop pada kabel ratusan meter.",
+        flow: "Line Level Input -> (1) Catu Daya (2 Trafo Toroidal + 6 Elco) & (2) Sirkuit Driver -> (3) Transistor/MOSFET Daya (didinginkan 4. Heatsink) -> (5) Sirkuit Proteksi -> (6) Trafo Output 100V Line.",
+        items: [
+          "Blok 1–3: Trafo toroidal + bank elco menyuplai energi DC; driver & MOSFET daya menggandakan daya.",
+          "Blok 4 (Heatsink) + Sensor Suhu DS18B20: Memantau suhu sirip pendingin & memicu efek termal/pendinginan.",
+          "Blok 5 (Proteksi) + Sensor Arus ACS712 / SCT-013: Mendeteksi arus berlebih/korsleting & mengaktifkan LED Protect.",
+          "Blok 6 (Trafo Output 100V): Menaikkan tegangan ke 100V Line untuk distribusi kabel jarak jauh."
+        ],
+        cam: [5.5, 8.5, 12],
+        target: [5.5, 1.1, 0]
+      },
+      spk: {
+        badge: "TAHAP 6 • TRANSDUSER OUTPUT (6 LAPISAN ELEKTROAKUSTIK)",
+        title: "Ceiling Speaker (100V Line)",
+        func: "Menurunkan sinyal tegangan tinggi 100V Line sesuai wattage tap (3W/6W/15W) dan mengubah sinyal listrik menjadi gelombang akustik suara yang terdengar di ruangan.",
+        flow: "Sinyal 100V Line -> (1) Trafo Matching (step-down & tap daya) -> (2) Kumparan Suara di (3) Magnet Permanen + (4) Suspensi Spider -> menggetarkan (5) Diafragma/Cone -> keluar lewat (6) Grille Logam.",
+        items: [
+          "Lapisan 1: Trafo matching menurunkan tegangan 100V sesuai tap (3W / 6W / 15W) dan impedansi voice coil.",
+          "Lapisan 2–5: Interaksi elektromagnetik voice coil & magnet permanen menggetarkan spider dan cone.",
+          "Lapisan 6: Grille logam melindungi cone dari debu/sentuhan tanpa menghalangi gelombang suara.",
+          "Pemantauan Suara: Level akustik keluaran bergantung pada wattage tap, jumlah speaker paralel, & panjang kabel."
+        ],
+        cam: [15.5, 6.5, 11],
+        target: [15.5, 1.5, 0]
+      }
+    };
+
+    // --- THREE.JS SETUP ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x070d19);
+    scene.fog = new THREE.FogExp2(0x070d19, 0.013);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 15, 28);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1.0, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.35);
+    dirLight.position.set(12, 24, 15);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const grid = new THREE.GridHelper(70, 70, 0x1e293b, 0x0f172a);
+    scene.add(grid);
+
+    const clickableList = [];
+    function tagClick(obj, nodeKey) {
+      obj.traverse(child => {
+        if (child.isMesh) {
+          child.userData.nodeKey = nodeKey;
+          clickableList.push(child);
+        }
+      });
+    }
+
+    // --- 1. PAGING MICROPHONE (X = -14) ---
+    const micGroup = new THREE.Group();
+    micGroup.position.set(-14, 0, 0);
+    scene.add(micGroup);
+
+    const micBase = new THREE.Mesh(
+      new THREE.BoxGeometry(3.2, 0.8, 3.6),
+      new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.4, roughness: 0.5 })
+    );
+    micBase.position.y = 0.4;
+    micGroup.add(micBase);
+
+    const pttButton = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.25, 1.4),
+      new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x000000 })
+    );
+    pttButton.position.set(0, 0.9, 0.6);
+    micGroup.add(pttButton);
+
+    const gooseneck = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.1, 2.2, 12),
+      new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8, roughness: 0.2 })
+    );
+    gooseneck.position.set(0, 1.9, -0.5);
+    micGroup.add(gooseneck);
+
+    // Kapsul Mikrofon (7 Lapisan dapat di-explode)
+    const capsuleGroup = new THREE.Group();
+    capsuleGroup.position.set(0, 3.2, -0.5);
+    micGroup.add(capsuleGroup);
+
+    const micLayers = [];
+    const layerSpecs = [
+      { geo: new THREE.SphereGeometry(0.65, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2), rotZ: Math.PI / 2, color: 0x94a3b8, wire: true, offset: -0.9 }, // 1. Grille
+      { geo: new THREE.CylinderGeometry(0.58, 0.58, 0.18, 16), rotZ: Math.PI / 2, color: 0x1e293b, wire: false, offset: -0.6 }, // 2. Foam
+      { geo: new THREE.SphereGeometry(0.52, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), rotZ: Math.PI / 2, color: 0x38bdf8, wire: false, offset: -0.3 }, // 3. Diafragma
+      { geo: new THREE.TorusGeometry(0.36, 0.08, 10, 24), rotY: Math.PI / 2, color: 0xd97706, wire: false, offset: 0.0 }, // 4. Voice Coil
+      { geo: new THREE.TorusGeometry(0.52, 0.16, 12, 24), rotY: Math.PI / 2, color: 0x64748b, wire: false, offset: 0.35 }, // 5. Magnet
+      { geo: new THREE.CylinderGeometry(0.62, 0.62, 0.5, 18), rotZ: Math.PI / 2, color: 0x475569, wire: false, offset: 0.7 } // 6. Housing
+    ];
+    layerSpecs.forEach((s, idx) => {
+      const mat = new THREE.MeshStandardMaterial({ color: s.color, wireframe: !!s.wire, metalness: 0.5, roughness: 0.35 });
+      const m = new THREE.Mesh(s.geo, mat);
+      if (s.rotZ) m.rotation.z = s.rotZ;
+      if (s.rotY) m.rotation.y = s.rotY;
+      m.position.x = s.offset;
+      capsuleGroup.add(m);
+      micLayers.push({ mesh: m, baseX: s.offset, idx });
+    });
+
+    // Sensor Suara MAX4466 / INMP441 di dekat kapsul Mic
+    const soundSensorMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.45, 0.45),
+      new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0x78350f })
+    );
+    soundSensorMesh.position.set(-1.35, 3.2, -0.5);
+    micGroup.add(soundSensorMesh);
+
+    tagClick(micGroup, 'mic');
+
+    // --- 2. PRE-AMPLIFIER / MIXER (X = -4.5) ---
+    const mixerGroup = new THREE.Group();
+    mixerGroup.position.set(-4.5, 0, 0);
+    scene.add(mixerGroup);
+
+    const mixerChassis = new THREE.Mesh(
+      new THREE.BoxGeometry(5.6, 1.3, 5.2),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.55, roughness: 0.4 })
+    );
+    mixerChassis.position.y = 0.65;
+    mixerGroup.add(mixerChassis);
+
+    const mixerPcb = new THREE.Mesh(
+      new THREE.BoxGeometry(5.0, 0.14, 4.5),
+      new THREE.MeshStandardMaterial({ color: 0x0f766e, roughness: 0.5 })
+    );
+    mixerPcb.position.y = 1.32;
+    mixerGroup.add(mixerPcb);
+
+    // Relay Priority Override Box di tengah PCB Mixer
+    const priorityRelay = new THREE.Mesh(
+      new THREE.BoxGeometry(0.85, 0.55, 0.85),
+      new THREE.MeshStandardMaterial({ color: 0x0284c7, emissive: 0x000000 })
+    );
+    priorityRelay.position.set(0, 1.62, -0.6);
+    mixerGroup.add(priorityRelay);
+
+    // Faders Mixing
+    const mixerFaders = [];
+    for (let i = 0; i < 4; i++) {
+      const f = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.22, 0.42),
+        new THREE.MeshStandardMaterial({ color: 0xf8fafc })
+      );
+      f.position.set(-1.2 + i * 0.8, 1.48, 1.1);
+      mixerGroup.add(f);
+      mixerFaders.push({ mesh: f, phase: i * 1.1 });
+    }
+    tagClick(mixerGroup, 'mixer');
+
+    // --- 3. POWER AMPLIFIER 100V LINE (X = 5.5) ---
+    const ampGroup = new THREE.Group();
+    ampGroup.position.set(5.5, 0, 0);
+    scene.add(ampGroup);
+
+    const ampBase = new THREE.Mesh(
+      new THREE.BoxGeometry(8.6, 0.3, 6.0),
+      new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.7, roughness: 0.3 })
+    );
+    ampBase.position.y = 0.15;
+    ampGroup.add(ampBase);
+
+    // 1. Catu Daya (2 Trafo Toroidal + Elco Biru)
+    for (let t = 0; t < 2; t++) {
+      const toroid = new THREE.Mesh(
+        new THREE.TorusGeometry(0.75, 0.32, 14, 28),
+        new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.75, roughness: 0.25 })
+      );
+      toroid.rotation.x = Math.PI / 2;
+      toroid.position.set(-3.1, 0.8, -1.0 + t * 2.0);
+      ampGroup.add(toroid);
+    }
+    for (let c = 0; c < 4; c++) {
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.24, 1.0, 14),
+        new THREE.MeshStandardMaterial({ color: 0x2563eb })
+      );
+      cap.position.set(-1.7, 0.8, -1.5 + c * 1.0);
+      ampGroup.add(cap);
+    }
+
+    // 2. Driver & 3. MOSFET Daya + 4. Heatsink + Sensor Suhu DS18B20
+    const heatsinkMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.85, roughness: 0.25, emissive: 0x000000 });
+    const heatsinkSpine = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.45, 4.4), heatsinkMat);
+    heatsinkSpine.position.set(0.2, 1.05, 0);
+    ampGroup.add(heatsinkSpine);
+    for (let f = 0; f < 14; f++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.4, 0.08), heatsinkMat);
+      fin.position.set(0.75, 1.05, -1.95 + f * 0.3);
+      ampGroup.add(fin);
+    }
+
+    // Sensor Suhu DS18B20 menempel di Heatsink
+    const tempSensorMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.14, 0.65, 12),
+      new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0369a1 })
+    );
+    tempSensorMesh.rotation.z = Math.PI / 2;
+    tempSensorMesh.position.set(1.35, 1.2, 0.4);
+    ampGroup.add(tempSensorMesh);
+
+    // 5. Sirkuit Proteksi + Sensor Arus ACS712 / SCT-013 + LED Protect
+    const protectRelay = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.7, 1.5),
+      new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x000000 })
+    );
+    protectRelay.position.set(2.2, 0.7, -1.2);
+    ampGroup.add(protectRelay);
+
+    const currentSensorMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.5, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0x581c87 })
+    );
+    currentSensorMesh.position.set(2.2, 0.7, 1.1);
+    ampGroup.add(currentSensorMesh);
+
+    const protectLed = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 12, 12),
+      new THREE.MeshStandardMaterial({ color: 0x450a0a, emissive: 0x000000 })
+    );
+    protectLed.position.set(2.2, 1.25, 2.8);
+    ampGroup.add(protectLed);
+
+    // 6. Trafo Output 100V Line
+    const outTrafo = new THREE.Mesh(
+      new THREE.BoxGeometry(1.35, 1.35, 1.5),
+      new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.6, roughness: 0.35 })
+    );
+    outTrafo.position.set(3.6, 0.95, 0.6);
+    ampGroup.add(outTrafo);
+
+    tagClick(ampGroup, 'amp');
+
+    // --- 4. CEILING SPEAKER (X = 15.5) ---
+    const spkGroup = new THREE.Group();
+    spkGroup.position.set(15.5, 0, 0);
+    scene.add(spkGroup);
+
+    const spkSubGroup = new THREE.Group();
+    spkSubGroup.position.set(0, 2.2, 0);
+    spkGroup.add(spkSubGroup);
+
+    // 1. Trafo Matching, 2. Voice Coil, 3. Magnet, 4. Spider, 5. Cone, 6. Grille
+    const spkLayers = [
+      { geo: new THREE.BoxGeometry(0.7, 0.7, 0.7), posX: -1.1, color: 0xd97706 }, // 1. Matching Transformer
+      { geo: new THREE.TorusGeometry(0.45, 0.1, 10, 20), rotY: Math.PI / 2, posX: -0.5, color: 0xb45309 }, // 2. Voice Coil
+      { geo: new THREE.TorusGeometry(0.72, 0.22, 12, 24), rotY: Math.PI / 2, posX: -0.05, color: 0x475569 }, // 3. Magnet
+      { geo: new THREE.RingGeometry(0.35, 0.85, 20), rotY: Math.PI / 2, posX: 0.35, color: 0xca8a04 }, // 4. Spider
+      { geo: new THREE.ConeGeometry(1.15, 0.85, 24, 1, true), rotZ: -Math.PI / 2, posX: 0.85, color: 0x1e293b }, // 5. Cone
+      { geo: new THREE.CylinderGeometry(1.22, 1.22, 0.14, 24), rotZ: Math.PI / 2, posX: 1.35, color: 0xe2e8f0 } // 6. Grille
+    ];
+    const spkAnimated = [];
+    spkLayers.forEach((l, idx) => {
+      const m = new THREE.Mesh(
+        l.geo,
+        new THREE.MeshStandardMaterial({ color: l.color, side: THREE.DoubleSide, metalness: 0.4, roughness: 0.4 })
+      );
+      if (l.rotY) m.rotation.y = l.rotY;
+      if (l.rotZ) m.rotation.z = l.rotZ;
+      m.position.x = l.posX;
+      spkSubGroup.add(m);
+      spkAnimated.push({ mesh: m, baseX: l.posX, idx });
+    });
+    tagClick(spkGroup, 'spk');
+
+    // --- JALUR SINYAL & PARTIKEL ---
+    const pathCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-13.3, 3.2, -0.5),
+      new THREE.Vector3(-10.0, 1.2, 0.0),
+      new THREE.Vector3(-4.5, 1.4, 0.0),
+      new THREE.Vector3(2.4, 0.9, -1.0),
+      new THREE.Vector3(9.1, 1.0, 0.6),
+      new THREE.Vector3(14.4, 2.2, 0.0)
+    ]);
+    const pathLine = new THREE.Mesh(
+      new THREE.TubeGeometry(pathCurve, 120, 0.05, 8, false),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35 })
+    );
+    scene.add(pathLine);
+
+    const signals = [];
+    for (let i = 0; i < 36; i++) {
+      const sMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.14, 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+      );
+      scene.add(sMesh);
+      signals.push({ mesh: sMesh, t: i / 36 });
+    }
+
+    // --- LOGIKA KONTROL & TELEMETRI ---
+    function computeTelemetry() {
+      state.priorityActive = state.ptt || state.alarm;
+      const activeAudio = (state.ptt ? 1.0 : 0.0) + (state.alarm ? 1.2 : 0.0) + (!state.priorityActive && state.bgm ? 0.55 : 0.0);
+      const gainFactor = state.gain * state.fader;
+      const loadFactor = (state.tapWatts / 15) * (state.spkCount / 6) * state.atten;
+
+      state.soundDb = Number((35 + Math.min(65, activeAudio * 28 * (0.5 + state.gain * 0.6))).toFixed(1));
+
+      if (state.fault === 'short') {
+        state.currentA = 18.5;
+        state.protectTripped = true;
+      } else if (state.fault === 'overload' || loadFactor > 0.88) {
+        state.currentA = Number((7.5 + loadFactor * 6.5).toFixed(2));
+        state.protectTripped = true;
+      } else {
+        state.currentA = Number((0.4 + loadFactor * 3.8 + activeAudio * 0.45).toFixed(2));
+        state.protectTripped = false;
+      }
+
+      const targetTemp = 28 + loadFactor * 36 + (state.protectTripped ? 18 : 0) + activeAudio * 4;
+      state.tempC = Number((state.tempC + (targetTemp - state.tempC) * 0.04).toFixed(1));
+
+      // Update UI Telemetry
+      const tempEl = document.getElementById('tele-temp');
+      const tempSub = document.getElementById('tele-temp-sub');
+      tempEl.textContent = `${state.tempC.toFixed(1)} °C`;
+      tempEl.className = 'tele-val ' + (state.tempC > 65 ? 'warn-text' : state.tempC > 50 ? 'amber-text' : 'ok-text');
+      tempSub.textContent = state.tempC > 65 ? 'Overheat Warning!' : 'Heatsink Terpantau';
+
+      const sndEl = document.getElementById('tele-sound');
+      const sndSub = document.getElementById('tele-sound-sub');
+      sndEl.textContent = `${state.soundDb.toFixed(1)} dB`; sndSub.textContent = state.alarm ? 'ALARM PRIORITAS' : state.ptt ? 'PAGING PTT AKTIF' : state.bgm ? 'BGM Aktif' : 'Sunyi';  const curEl = document.getElementById('tele-current'); const curSub = document.getElementById('tele-current-sub'); curEl.textContent = `${state.currentA.toFixed(2)} A`;
+      curEl.className = 'tele-val ' + (state.protectTripped ? 'warn-text' : 'ok-text');
+      curSub.textContent = `Tap ${state.tapWatts}W × ${state.spkCount} Spk • ${state.cableMeters}m`;  const stEl = document.getElementById('tele-status'); const stSub = document.getElementById('tele-status-sub'); if (state.protectTripped) { stEl.textContent = state.fault === 'short' ? 'SHORT CIRCUIT' : 'OVERLOAD'; stEl.className = 'tele-val warn-text'; stSub.textContent = 'LED Protect Merah Aktif'; } else { stEl.textContent = state.priorityActive ? 'PRIORITY OVERRIDE' : 'NORMAL'; stEl.className = 'tele-val ' + (state.priorityActive ? 'amber-text' : 'ok-text'); stSub.textContent = state.priorityActive ? 'BGM Diredam/Diputus' : 'Alur 100V Line Aktif'; }  // Visual 3D status pttButton.material.emissive.setHex(state.ptt ? 0x16a34a : 0x000000); priorityRelay.material.emissive.setHex(state.priorityActive ? 0xeab308 : 0x000000); protectLed.material.color.setHex(state.protectTripped ? 0xef4444 : 0x450a0a); protectLed.material.emissive.setHex(state.protectTripped ? 0xdc2626 : 0x000000); protectRelay.material.emissive.setHex(state.protectTripped ? 0xdc2626 : 0x000000);  const heatRatio = Math.max(0, Math.min(1, (state.tempC - 30) / 45)); heatsinkMat.emissive.setRGB(heatRatio * 0.9, heatRatio * 0.15, 0); }  window.togglePTT = function() { state.ptt = !state.ptt; const b = document.getElementById('btn-ptt'); b.textContent = state.ptt ? 'PTT Mic: ON' : 'PTT Mic: OFF'; b.classList.toggle('active', state.ptt); }; window.toggleBGM = function() { state.bgm = !state.bgm; const b = document.getElementById('btn-bgm'); b.textContent = state.bgm ? 'BGM: ON' : 'BGM: OFF'; b.classList.toggle('active', state.bgm); }; window.toggleAlarm = function() { state.alarm = !state.alarm; const b = document.getElementById('btn-alarm'); b.textContent = state.alarm ? 'Alarm: ON' : 'Alarm: OFF'; b.classList.toggle('active', state.alarm); }; window.toggleExplode = function() { state.explode = !state.explode; const b = document.getElementById('btn-explode'); b.textContent = state.explode ? 'Explode: ON' : 'Explode: OFF'; b.classList.toggle('active', state.explode); }; window.setTap = function(w) { state.tapWatts = w; [3, 6, 15].forEach(v => document.getElementById('tap-' + v).classList.toggle('active', v === w)); computeTelemetry(); }; window.toggleFault = function(type) { state.fault = state.fault === type ? null : type; document.getElementById('btn-short').classList.toggle('active', state.fault === 'short'); document.getElementById('btn-overload').classList.toggle('active', state.fault === 'overload'); computeTelemetry(); }; window.updateParams = function() { state.gain = Number(document.getElementById('rng-gain').value) / 100; state.eq = Number(document.getElementById('rng-eq').value); state.fader = Number(document.getElementById('rng-fader').value) / 100; state.atten = Number(document.getElementById('rng-atten').value) / 100; state.cableMeters = Number(document.getElementById('rng-cable').value); state.spkCount = Number(document.getElementById('rng-spk').value);  document.getElementById('val-gain').textContent = Math.round(state.gain * 100) + '\%'; document.getElementById('val-eq').textContent = (state.eq >= 0 ? '+' : '') + state.eq + ' dB'; document.getElementById('val-fader').textContent = Math.round(state.fader * 100) + '\%'; document.getElementById('val-atten').textContent = Math.round(state.atten * 100) + '\%'; document.getElementById('val-cable').textContent = state.cableMeters + ' m'; document.getElementById('val-spk').textContent = state.spkCount + ' Unit'; computeTelemetry(); };  let targetCam = new THREE.Vector3(0, 15, 28); let targetLook = new THREE.Vector3(0, 1.0, 0);  window.focusNode = function(key) { state.activeNode = key; const d = nodeDetails[key]; document.getElementById('insp-badge').textContent = d.badge; document.getElementById('insp-title').textContent = d.title; document.getElementById('insp-func').textContent = d.func; document.getElementById('insp-flow').textContent = d.flow; document.getElementById('insp-list').innerHTML = d.items.map(i => `<li>${i}</li>`).join('');
+
+      ['mic', 'mixer', 'amp', 'spk'].forEach(k => {
+        document.getElementById('node-' + k).classList.toggle('active', k === key);
+      });
+      targetCam.set(...d.cam);
+      targetLook.set(...d.target);
+    };
+
+    window.setCam = function(mode) {
+      if (mode === 'overview') {
+        targetCam.set(0, 15, 28);
+        targetLook.set(0, 1.0, 0);
+      } else if (mode === 'closeup') {
+        focusNode(state.activeNode);
+      } else if (mode === 'sensors') {
+        targetCam.set(3, 9, 14);
+        targetLook.set(2, 1.2, 0);
+      }
+    };
+
+    // Klik 3D Raycaster
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target.tagName !== 'CANVAS') return;
+      pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(clickableList);
+      if (hits.length > 0 && hits[0].object.userData.nodeKey) {
+        focusNode(hits[0].object.userData.nodeKey);
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- OSILOSKOP 5 TITIK ---
+    const scopeCanvas = document.getElementById('scope-canvas');
+    const scopeCtx = scopeCanvas.getContext('2d');
+    function drawScope(t) {
+      const w = scopeCanvas.width;
+      const h = scopeCanvas.height;
+      scopeCtx.clearRect(0, 0, w, h);
+
+      // Garis tengah
+      scopeCtx.strokeStyle = '#1e293b';
+      scopeCtx.lineWidth = 1;
+      scopeCtx.beginPath();
+      scopeCtx.moveTo(0, h / 2);
+      scopeCtx.lineTo(w, h / 2);
+      scopeCtx.stroke();
+
+      const segW = w / 5;
+      const baseAmp = (state.soundDb - 30) / 70;
+      const lineAmp = Math.min(1, baseAmp * (0.4 + state.gain * 0.8) * state.fader);
+      const cableAtten = Math.max(0.45, 1 - (state.cableMeters / 400) * 0.35);
+      const hvAmp = state.protectTripped ? 0.02 : Math.min(1.2, lineAmp * (0.5 + state.atten * 1.1));
+      const spkAmp = state.protectTripped ? 0.01 : Math.min(1.2, hvAmp * cableAtten * (state.tapWatts / 15 + 0.35));
+
+      const amps = [baseAmp * 0.6, baseAmp * 0.35, lineAmp * 0.75, hvAmp * 0.9, spkAmp * 0.85];
+      const colors = ['#38bdf8', '#818cf8', '#22d3ee', '#facc15', '#4ade80'];
+
+      for (let s = 0; s < 5; s++) {
+        scopeCtx.strokeStyle = colors[s];
+        scopeCtx.lineWidth = 1.6;
+        scopeCtx.beginPath();
+        const xStart = s * segW;
+        for (let px = 0; px <= segW; px += 2) {
+          const norm = px / segW;
+          const freq = 0.25 + s * 0.04 + (state.eq / 24) * 0.08;
+          const y = h / 2 + Math.sin((xStart + px) * freq + t * 8) * (amps[s] * 34);
+          if (px === 0) scopeCtx.moveTo(xStart + px, y);
+          else scopeCtx.lineTo(xStart + px, y);
+        }
+        scopeCtx.stroke();
+      }
+    }
+
+    // --- ANIMATION LOOP ---
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+      computeTelemetry();
+
+      // Explode offset untuk lapisan Mic & Speaker
+      const expFactor = state.explode ? 1.85 : 1.0;
+      micLayers.forEach(l => {
+        l.mesh.position.x = l.baseX * expFactor;
+      });
+      spkAnimated.forEach(l => {
+        l.mesh.position.x = l.baseX * expFactor;
+      });
+
+      // Getaran Diafragma & Voice Coil sesuai suara input
+      const vib = ((state.soundDb - 35) / 65) * 0.08;
+      const osc = Math.sin(elapsed * 28) * vib;
+      if (micLayers[2]) micLayers[2].mesh.position.x += osc;
+      if (micLayers[3]) micLayers[3].mesh.position.x += osc;
+
+      // Getaran Cone Speaker jika tidak trip proteksi
+      const spkOsc = state.protectTripped ? 0 : Math.sin(elapsed * 26) * vib * (state.tapWatts / 15 + 0.3);
+      if (spkAnimated[4]) spkAnimated[4].mesh.position.x += spkOsc;
+
+      // Fader Mixer bergerak lembut
+      mixerFaders.forEach(f => {
+        f.mesh.position.z = 1.1 + Math.sin(elapsed * 2.2 + f.phase) * 0.45;
+      });
+
+      // Partikel Sinyal sepanjang rantai
+      const speed = state.protectTripped ? 0.0004 : 0.0035 + state.atten * 0.003;
+      signals.forEach(p => {
+        p.t = (p.t + speed) % 1;
+        const pt = pathCurve.getPointAt(p.t);
+        p.mesh.position.copy(pt);
+
+        if (state.protectTripped && p.t > 0.55) {
+          p.mesh.scale.setScalar(0.25);
+          p.mesh.material.color.setHex(0xef4444);
+        } else if (p.t < 0.45) {
+          p.mesh.scale.setScalar(0.75);
+          p.mesh.material.color.setHex(0x38bdf8);
+        } else if (p.t < 0.78) {
+          p.mesh.scale.setScalar(1.35);
+          p.mesh.material.color.setHex(0xfacc15);
+        } else {
+          p.mesh.scale.setScalar(1.05);
+          p.mesh.material.color.setHex(0x4ade80);
+        }
+      });
+
+      drawScope(elapsed);
+
+      camera.position.lerp(targetCam, 0.06);
+      controls.target.lerp(targetLook, 0.06);
+      controls.update();
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

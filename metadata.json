@@ -1,0 +1,6 @@
+{
+  "name": "SIMULASI 3D PUBLIC ADDRESS SYSTEM KELOMPOK 3",
+  "description": "Simulasi 3D Digital Twin Public Address System (100V Line) interaktif karya Kelompok 3: Andit Aziz Saputra, Muh. Anugrah Nasir, dan Orhyzae Alifah Tamsur.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
